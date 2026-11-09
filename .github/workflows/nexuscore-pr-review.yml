@@ -1,0 +1,77 @@
+name: "🛰️ NexusCore Automated PR Security Review"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  nexuscore-security-audit:
+    name: "Zero-Trust PR Security & Self-Healing Audit"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Checkout Repository Code"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Set up Python Environment"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: "Install NexusCore Dependencies"
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: "Extract Pull Request Diff"
+        id: pr_diff
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD > pr_changes.diff
+          echo "DIFF_FILE=pr_changes.diff" >> $GITHUB_ENV
+
+      - name: "Run NexusCore PR Security Reviewer"
+        id: run_audit
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -c "
+          import sys, os
+          from backend.pr_reviewer import PRReviewEngine
+          
+          with open('pr_changes.diff', 'r', encoding='utf-8', errors='ignore') as f:
+              diff_content = f.read()
+
+          pr_title = '${{ github.event.pull_request.title }}'
+          result = PRReviewEngine.review_pr_sync(pr_title, diff_content)
+          
+          with open('pr_review_comment.md', 'w', encoding='utf-8') as out:
+              out.write(result.markdown_report)
+
+          if result.status == 'REQUEST_CHANGES':
+              print('::error::NexusCore intercepted critical vulnerabilities in PR. Merging blocked.')
+              sys.exit(1)
+          "
+
+      - name: "Post Automated Security Review to Pull Request"
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            if (fs.existsSync('pr_review_comment.md')) {
+              const body = fs.readFileSync('pr_review_comment.md', 'utf8');
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            }

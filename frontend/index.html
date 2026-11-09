@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUSCORE // Autonomous DevSecOps & Automated PR Reviewer</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        orbitron: ['Orbitron', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        cyber: {
+                            bg: '#05070d',
+                            card: '#0c101d',
+                            border: '#1b233d',
+                            cyan: '#00f0ff',
+                            blue: '#3b82f6',
+                            green: '#00ff88',
+                            red: '#ff0044',
+                            amber: '#ffaa00',
+                            purple: '#b026ff',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #05070d;
+            background-image: 
+                radial-gradient(circle at 50% 0%, rgba(0, 240, 255, 0.08) 0%, transparent 60%),
+                radial-gradient(circle at 100% 100%, rgba(176, 38, 255, 0.05) 0%, transparent 50%),
+                linear-gradient(rgba(27, 35, 61, 0.25) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(27, 35, 61, 0.25) 1px, transparent 1px);
+            background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
+        }
+
+        .neon-border-cyan {
+            border: 1px solid rgba(0, 240, 255, 0.35);
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.15), inset 0 0 15px rgba(0, 240, 255, 0.05);
+        }
+
+        .neon-border-red {
+            border: 1px solid rgba(255, 0, 68, 0.6);
+            box-shadow: 0 0 25px rgba(255, 0, 68, 0.3), inset 0 0 15px rgba(255, 0, 68, 0.1);
+        }
+
+        .neon-border-green {
+            border: 1px solid rgba(0, 255, 136, 0.4);
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.15), inset 0 0 10px rgba(0, 255, 136, 0.05);
+        }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(12, 16, 29, 0.8); }
+        ::-webkit-scrollbar-thumb { background: rgba(0, 240, 255, 0.3); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(0, 240, 255, 0.6); }
+
+        .scanlines {
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
+            background-size: 100% 3px, 6px 100%;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="text-slate-200 font-sans min-h-screen flex flex-col relative overflow-x-hidden selection:bg-cyan-500 selection:text-black">
+
+    <div class="fixed inset-0 scanlines z-40"></div>
+    <canvas id="bg-canvas" class="fixed inset-0 pointer-events-none z-0 opacity-40"></canvas>
+
+    <!-- TOP MISSION CONTROL NAVIGATION BAR -->
+    <header class="relative z-50 border-b border-cyber-border bg-cyber-bg/80 backdrop-blur-xl px-6 py-3.5 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+            <div class="relative flex items-center justify-center w-10 h-10 rounded-lg bg-cyber-cyan/10 border border-cyber-cyan/30 text-cyber-cyan shadow-[0_0_15px_rgba(0,240,255,0.3)]">
+                <i data-lucide="shield-check" class="w-6 h-6"></i>
+                <span class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-cyber-cyan animate-ping"></span>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="font-orbitron font-black text-xl tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyber-cyan via-white to-cyber-purple">
+                        NEXUSCORE
+                    </h1>
+                    <span class="px-2 py-0.5 rounded text-[10px] font-mono tracking-widest bg-cyber-cyan/10 border border-cyber-cyan/30 text-cyber-cyan">
+                        PRODUCTION v2.0
+                    </span>
+                </div>
+                <p class="text-xs text-slate-400 font-mono tracking-wide">AUTONOMOUS DEVSECOPS & GITHUB PR REVIEW BOT</p>
+            </div>
+        </div>
+
+        <!-- Mode Switcher Tabs -->
+        <div class="flex items-center bg-slate-900/90 border border-cyber-border rounded-lg p-1 gap-1">
+            <button id="tab-btn-swarm" onclick="switchMode('swarm')" class="px-3.5 py-1.5 rounded-md text-xs font-mono font-bold flex items-center gap-2 bg-cyber-cyan text-black transition shadow-[0_0_10px_rgba(0,240,255,0.3)]">
+                <i data-lucide="cpu" class="w-3.5 h-3.5"></i> Swarm Mission
+            </button>
+            <button id="tab-btn-pr" onclick="switchMode('pr')" class="px-3.5 py-1.5 rounded-md text-xs font-mono font-bold flex items-center gap-2 text-slate-400 hover:text-white transition">
+                <i data-lucide="git-pull-request" class="w-3.5 h-3.5 text-cyber-cyan"></i> PR Reviewer Bot
+            </button>
+        </div>
+
+        <!-- Audio & Action Controls -->
+        <div class="flex items-center gap-3">
+            <button id="sound-toggle" onclick="toggleAudio()" class="px-3 py-1.5 rounded-lg bg-cyber-card border border-cyber-border text-slate-300 hover:text-cyber-cyan hover:border-cyber-cyan/40 transition flex items-center gap-2 text-xs font-mono">
+                <i id="sound-icon" data-lucide="volume-2" class="w-4 h-4 text-cyber-cyan"></i>
+                <span id="sound-text">AUDIO: ON</span>
+            </button>
+            <div class="h-6 w-[1px] bg-cyber-border"></div>
+            <button onclick="resetSwarm()" class="px-3 py-1.5 rounded-lg bg-cyber-card border border-cyber-border text-slate-300 hover:text-red-400 hover:border-red-400/40 transition flex items-center gap-1.5 text-xs font-mono">
+                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> RESET
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN DASHBOARD CONTENT -->
+    <main class="relative z-10 flex-1 p-6 space-y-6 max-w-[1700px] w-full mx-auto">
+
+        <!-- ========================================== -->
+        <!-- MODE 1: SWARM MISSION CONTROL (DEFAULT)   -->
+        <!-- ========================================== -->
+        <div id="mode-swarm-container" class="space-y-6">
+            
+            <!-- 1. HOLOGRAPHIC AGENT RADAR CARDS (4 AGENTS) -->
+            <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+                <!-- AGENT 1: SCOUT -->
+                <div id="card-scout" class="relative rounded-xl p-5 bg-cyber-card/90 border border-cyber-border transition-all duration-300 hover:border-cyber-cyan/50 group overflow-hidden">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-lg bg-cyber-cyan/10 border border-cyber-cyan/30 flex items-center justify-center text-cyber-cyan">
+                                <i data-lucide="compass" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-orbitron font-bold text-sm tracking-wide text-white">SCOUT</h3>
+                                <p class="text-[10px] font-mono text-cyber-cyan">RESEARCHER & ARCHITECT</p>
+                            </div>
+                        </div>
+                        <span id="badge-scout" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700">IDLE</span>
+                    </div>
+                    <div class="space-y-2 mt-4 text-xs font-mono">
+                        <div class="flex justify-between text-slate-400">
+                            <span>Role:</span> <span class="text-slate-200">Threat Modeling & Specs</span>
+                        </div>
+                        <p id="msg-scout" class="text-[11px] text-slate-400 italic truncate pt-1 border-t border-cyber-border/60">Ready for mission directive...</p>
+                    </div>
+                </div>
+
+                <!-- AGENT 2: BUILDER -->
+                <div id="card-builder" class="relative rounded-xl p-5 bg-cyber-card/90 border border-cyber-border transition-all duration-300 hover:border-blue-500/50 group overflow-hidden">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                                <i data-lucide="code-2" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-orbitron font-bold text-sm tracking-wide text-white">BUILDER</h3>
+                                <p class="text-[10px] font-mono text-blue-400">SOFTWARE ENGINEER</p>
+                            </div>
+                        </div>
+                        <span id="badge-builder" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700">IDLE</span>
+                    </div>
+                    <div class="space-y-2 mt-4 text-xs font-mono">
+                        <div class="flex justify-between text-slate-400">
+                            <span>Role:</span> <span class="text-slate-200">Synthesis & Self-Healing</span>
+                        </div>
+                        <p id="msg-builder" class="text-[11px] text-slate-400 italic truncate pt-1 border-t border-cyber-border/60">Awaiting architecture specs...</p>
+                    </div>
+                </div>
+
+                <!-- AGENT 3: GUARDIAN -->
+                <div id="card-guardian" class="relative rounded-xl p-5 bg-cyber-card/90 border border-cyber-border transition-all duration-300 hover:border-red-500/50 group overflow-hidden">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400">
+                                <i data-lucide="shield-alert" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-orbitron font-bold text-sm tracking-wide text-white">GUARDIAN</h3>
+                                <p class="text-[10px] font-mono text-red-400">SECURITY SENTINEL</p>
+                            </div>
+                        </div>
+                        <span id="badge-guardian" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700">ARMED</span>
+                    </div>
+                    <div class="space-y-2 mt-4 text-xs font-mono">
+                        <div class="flex justify-between text-slate-400">
+                            <span>Engine:</span> <span class="text-red-400 font-bold">AST + Groq Semantic Audit</span>
+                        </div>
+                        <p id="msg-guardian" class="text-[11px] text-slate-400 italic truncate pt-1 border-t border-cyber-border/60">Zero-Trust Sentinel active...</p>
+                    </div>
+                </div>
+
+                <!-- AGENT 4: AUDITOR -->
+                <div id="card-auditor" class="relative rounded-xl p-5 bg-cyber-card/90 border border-cyber-border transition-all duration-300 hover:border-cyber-green/50 group overflow-hidden">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-lg bg-cyber-green/10 border border-cyber-green/30 flex items-center justify-center text-cyber-green">
+                                <i data-lucide="terminal" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-orbitron font-bold text-sm tracking-wide text-white">AUDITOR</h3>
+                                <p class="text-[10px] font-mono text-cyber-green">QA & SANDBOX TESTER</p>
+                            </div>
+                        </div>
+                        <span id="badge-auditor" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700">IDLE</span>
+                    </div>
+                    <div class="space-y-2 mt-4 text-xs font-mono">
+                        <div class="flex justify-between text-slate-400">
+                            <span>Sandbox:</span> <span class="text-slate-200">Ephemeral In-Memory</span>
+                        </div>
+                        <p id="msg-auditor" class="text-[11px] text-slate-400 italic truncate pt-1 border-t border-cyber-border/60">Awaiting code verification...</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. MISSION DIRECTIVE INPUT & ATTACK TESTERS -->
+            <section class="rounded-xl p-5 bg-cyber-card/95 border border-cyber-border neon-border-cyan">
+                <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+                    <div class="flex-1 flex items-center gap-3">
+                        <div class="flex items-center justify-center w-9 h-9 rounded-lg bg-cyber-border/60 text-cyber-cyan">
+                            <i data-lucide="play" class="w-4 h-4"></i>
+                        </div>
+                        <div class="flex-1 relative">
+                            <input id="custom-task-input" type="text" 
+                                placeholder="Enter task directive..." 
+                                value="Build an asynchronous token bucket rate limiter in Python with thread-safe locking"
+                                class="w-full bg-slate-900/80 border border-cyber-border rounded-lg px-4 py-2.5 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-cyber-cyan transition">
+                        </div>
+                        <button onclick="runCustomTask()" id="btn-run" class="px-5 py-2.5 rounded-lg bg-cyber-cyan text-black font-orbitron font-bold text-xs tracking-wider hover:bg-cyan-300 transition flex items-center gap-2">
+                            <i data-lucide="cpu" class="w-4 h-4"></i> EXECUTE REAL TASK
+                        </button>
+                    </div>
+
+                    <div class="flex items-center gap-2 border-t lg:border-t-0 lg:border-l border-cyber-border pt-4 lg:pt-0 lg:pl-6">
+                        <span class="text-xs font-mono text-red-400 flex items-center gap-1.5 font-bold mr-1">
+                            <i data-lucide="flame" class="w-3.5 h-3.5"></i> TEST ATTACKS:
+                        </span>
+                        <button onclick="triggerRealAttack('SQL_INJECTION')" class="px-3 py-2 rounded-lg bg-red-950/40 border border-red-500/40 text-red-300 hover:bg-red-900/60 transition text-xs font-mono flex items-center gap-1.5">
+                            <i data-lucide="database" class="w-3 h-3 text-red-400"></i> Raw SQL
+                        </button>
+                        <button onclick="triggerRealAttack('SECRET_LEAK')" class="px-3 py-2 rounded-lg bg-amber-950/40 border border-amber-500/40 text-amber-300 hover:bg-amber-900/60 transition text-xs font-mono flex items-center gap-1.5">
+                            <i data-lucide="key" class="w-3 h-3 text-amber-400"></i> Secret Leak
+                        </button>
+                        <button onclick="triggerRealAttack('OS_HIJACK')" class="px-3 py-2 rounded-lg bg-purple-950/40 border border-purple-500/40 text-purple-300 hover:bg-purple-900/60 transition text-xs font-mono flex items-center gap-1.5">
+                            <i data-lucide="terminal" class="w-3 h-3 text-purple-400"></i> OS Shell
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. CENTRAL STAGE: CODE DIFF & LIVE TERMINAL -->
+            <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- LEFT: CODE DIFF VIEWER -->
+                <div class="lg:col-span-7 rounded-xl bg-cyber-card/95 border border-cyber-border overflow-hidden flex flex-col h-[500px]">
+                    <div class="px-4 py-3 bg-slate-900/80 border-b border-cyber-border flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="git-compare" class="w-4 h-4 text-cyber-cyan"></i>
+                            <span class="font-orbitron text-xs font-bold tracking-wider text-white">REAL CODE DIFF & SELF-HEALING ENGINE</span>
+                        </div>
+                        <span id="diff-status-badge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400 border border-slate-700">STANDBY</span>
+                    </div>
+
+                    <div class="flex-1 grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-cyber-border overflow-hidden">
+                        <div class="flex flex-col h-full bg-slate-950/60 overflow-hidden">
+                            <div class="px-3 py-1.5 bg-red-950/30 border-b border-cyber-border/60 flex items-center justify-between text-[11px] font-mono text-red-300">
+                                <span class="flex items-center gap-1"><i data-lucide="shield-x" class="w-3 h-3 text-red-400"></i> ORIGINAL SYNTHESIS</span>
+                                <span id="tag-left" class="text-[10px] text-slate-400">AWAITING CODE</span>
+                            </div>
+                            <pre id="code-left" class="flex-1 p-3 font-mono text-[11px] text-red-200/90 overflow-y-auto leading-relaxed whitespace-pre-wrap">// Waiting for mission execution...</pre>
+                        </div>
+
+                        <div class="flex flex-col h-full bg-slate-950/60 overflow-hidden">
+                            <div class="px-3 py-1.5 bg-emerald-950/30 border-b border-cyber-border/60 flex items-center justify-between text-[11px] font-mono text-emerald-300">
+                                <span class="flex items-center gap-1"><i data-lucide="shield-check" class="w-3 h-3 text-cyber-green"></i> VERIFIED PRODUCTION CODE</span>
+                                <span id="tag-right" class="text-[10px] text-cyber-green/80">CERTIFIED SAFE</span>
+                            </div>
+                            <pre id="code-right" class="flex-1 p-3 font-mono text-[11px] text-emerald-200/90 overflow-y-auto leading-relaxed whitespace-pre-wrap">// Waiting for Guardian validation...</pre>
+                        </div>
+                    </div>
+
+                    <div id="diff-footer" class="px-4 py-2 bg-slate-900/60 border-t border-cyber-border text-[11px] font-mono text-slate-400 flex items-center justify-between">
+                        <span id="diff-footer-text">Production Zero-Trust Pipeline Active.</span>
+                        <span id="sandbox-latency" class="text-cyber-green font-bold">Execution: 0.0s</span>
+                    </div>
+                </div>
+
+                <!-- RIGHT: LIVE LOG STREAM -->
+                <div class="lg:col-span-5 rounded-xl bg-cyber-card/95 border border-cyber-border overflow-hidden flex flex-col h-[500px]">
+                    <div class="px-4 py-3 bg-slate-900/80 border-b border-cyber-border flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="terminal" class="w-4 h-4 text-cyber-green"></i>
+                            <span class="font-orbitron text-xs font-bold tracking-wider text-white">LIVE TELEMETRY STREAM</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-cyber-green animate-ping"></span>
+                            <span class="text-[10px] font-mono text-cyber-green">LIVE</span>
+                        </div>
+                    </div>
+
+                    <div id="terminal-body" class="flex-1 p-4 font-mono text-[11px] overflow-y-auto space-y-2 bg-[#04060c]">
+                        <div class="text-slate-500">> [SYSTEM] NexusCore Production Engine initialized.</div>
+                        <div class="text-cyber-cyan">> [ENGINE] Connected to Groq Cloud (Llama 3.3 70B Versatile).</div>
+                        <div class="text-slate-500">> [SENTINEL] Real AST & Semantic Guardrails ready. Enter directive to begin.</div>
+                    </div>
+
+                    <div class="px-3 py-2 bg-slate-900/60 border-t border-cyber-border flex items-center gap-2">
+                        <span class="text-cyber-cyan font-mono text-xs font-bold">>_</span>
+                        <span class="text-xs font-mono text-slate-400 italic">Streaming live telemetry...</span>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- MODE 2: GITHUB PULL REQUEST REVIEWER (NEW) -->
+        <!-- ========================================== -->
+        <div id="mode-pr-container" class="hidden space-y-6">
+            
+            <!-- PR Reviewer Banner & Actions -->
+            <section class="rounded-xl p-5 bg-cyber-card/95 border border-cyber-border neon-border-cyan flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="git-pull-request" class="w-5 h-5 text-cyber-cyan"></i>
+                        <h2 class="font-orbitron font-bold text-base text-white tracking-wide">AUTOMATED GITHUB PR SECURITY & QUALITY REVIEWER</h2>
+                    </div>
+                    <p class="text-xs font-mono text-slate-400 mt-1">
+                        Zero-Trust PR Guardian. Detects vulnerabilities, generates line-by-line <code class="text-cyber-cyan">```suggestion```</code> blocks, and blocks risky commits.
+                    </p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button onclick="loadSamplePR()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-mono text-slate-300 border border-slate-700 flex items-center gap-2 transition">
+                        <i data-lucide="file-code" class="w-3.5 h-3.5 text-amber-400"></i> Load Sample Vulnerable PR
+                    </button>
+                    <button onclick="executePRReview()" id="btn-pr-review" class="px-5 py-2 rounded-lg bg-cyber-cyan text-black font-orbitron font-bold text-xs tracking-wider hover:bg-cyan-300 transition flex items-center gap-2 shadow-[0_0_15px_rgba(0,240,255,0.3)]">
+                        <i data-lucide="shield-search" class="w-4 h-4"></i> RUN PR AUDIT
+                    </button>
+                </div>
+            </section>
+
+            <!-- PR Input & Review Stage -->
+            <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- LEFT: Pull Request Diff Input -->
+                <div class="lg:col-span-5 rounded-xl bg-cyber-card/95 border border-cyber-border overflow-hidden flex flex-col h-[580px]">
+                    <div class="px-4 py-3 bg-slate-900/80 border-b border-cyber-border flex items-center justify-between">
+                        <span class="font-orbitron text-xs font-bold text-white flex items-center gap-2">
+                            <i data-lucide="file-diff" class="w-4 h-4 text-slate-400"></i> PR METADATA & CODE CHANGES
+                        </span>
+                        <span class="text-[10px] font-mono text-slate-500">PASTE DIFF OR SCRIPT</span>
+                    </div>
+                    <div class="p-3 border-b border-cyber-border bg-slate-950/40">
+                        <label class="block text-[10px] font-mono text-slate-400 mb-1">PULL REQUEST TITLE:</label>
+                        <input id="pr-title-input" type="text" value="PR #42: Add user search & cache cleanup utility" 
+                            class="w-full bg-slate-900 border border-cyber-border rounded px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-cyber-cyan">
+                    </div>
+                    <div class="flex-1 flex flex-col p-3 bg-slate-950/80">
+                        <label class="block text-[10px] font-mono text-slate-400 mb-1">PROPOSED CODE / GIT DIFF:</label>
+                        <textarea id="pr-code-input" class="flex-1 w-full bg-slate-900/90 border border-cyber-border rounded p-3 font-mono text-xs text-slate-200 focus:outline-none focus:border-cyber-cyan resize-none leading-relaxed" placeholder="Paste pull request diff or Python code here..."></textarea>
+                    </div>
+                </div>
+
+                <!-- RIGHT: Automated GitHub PR Review Comment Report -->
+                <div class="lg:col-span-7 rounded-xl bg-cyber-card/95 border border-cyber-border overflow-hidden flex flex-col h-[580px]">
+                    <div class="px-4 py-3 bg-slate-900/80 border-b border-cyber-border flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="message-square-code" class="w-4 h-4 text-cyber-green"></i>
+                            <span class="font-orbitron text-xs font-bold text-white">AUTOMATED GITHUB PR REVIEW REPORT</span>
+                        </div>
+                        <span id="pr-badge-verdict" class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                            AWAITING AUDIT
+                        </span>
+                    </div>
+
+                    <!-- Rendered Markdown Report Output -->
+                    <div id="pr-report-output" class="flex-1 p-5 overflow-y-auto font-mono text-xs space-y-4 bg-[#060810] leading-relaxed">
+                        <div class="text-slate-500 italic text-center py-24">
+                            Click "Run PR Audit" or "Load Sample Vulnerable PR" to inspect automated PR review findings, AST flags, and self-healed code suggestions.
+                        </div>
+                    </div>
+
+                    <div class="px-4 py-2 bg-slate-900/60 border-t border-cyber-border flex items-center justify-between text-xs font-mono">
+                        <span id="pr-findings-summary" class="text-slate-400">Ready to audit PR.</span>
+                        <button onclick="copyPRReport()" class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyber-cyan border border-cyber-border text-[11px] flex items-center gap-1.5 transition">
+                            <i data-lucide="copy" class="w-3 h-3"></i> Copy Markdown Comment
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+    </main>
+
+    <!-- SCRIPT LOGIC & WEBSOCKET CLIENT -->
+    <script>
+        // Web Audio Synthesizer
+        let audioContext = null;
+        let soundEnabled = true;
+
+        function getAudioContext() {
+            if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioContext.state === 'suspended') audioContext.resume();
+            return audioContext;
+        }
+
+        function toggleAudio() {
+            soundEnabled = !soundEnabled;
+            document.getElementById("sound-text").innerText = soundEnabled ? "AUDIO: ON" : "AUDIO: MUTED";
+            document.getElementById("sound-icon").setAttribute("data-lucide", soundEnabled ? "volume-2" : "volume-x");
+            lucide.createIcons();
+            if (soundEnabled) playBeep(880, 0.1);
+        }
+
+        function playBeep(freq = 600, duration = 0.08) {
+            if (!soundEnabled) return;
+            try {
+                const ctx = getAudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(freq, ctx.currentTime);
+                gain.gain.setValueAtTime(0.08, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + duration);
+            } catch(e) {}
+        }
+
+        function playSiren() {
+            if (!soundEnabled) return;
+            try {
+                const ctx = getAudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = "sawtooth";
+                osc.frequency.setValueAtTime(400, ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(800, ctx.currentTime + 0.2);
+                osc.frequency.linearRampToValueAtTime(400, ctx.currentTime + 0.4);
+                gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.45);
+            } catch(e) {}
+        }
+
+        function playSuccessChime() {
+            if (!soundEnabled) return;
+            setTimeout(() => playBeep(523.25, 0.1), 0);
+            setTimeout(() => playBeep(659.25, 0.1), 100);
+            setTimeout(() => playBeep(783.99, 0.15), 200);
+            setTimeout(() => playBeep(1046.50, 0.25), 300);
+        }
+
+        // Particle Canvas
+        const canvas = document.getElementById('bg-canvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        for (let i = 0; i < 45; i++) {
+            particles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                radius: Math.random() * 1.5 + 0.5,
+                color: Math.random() > 0.5 ? 'rgba(0, 240, 255, ' : 'rgba(176, 38, 255, ',
+                alpha: Math.random() * 0.6 + 0.2,
+                vx: (Math.random() - 0.5) * 0.3,
+                vy: (Math.random() - 0.5) * 0.3
+            });
+        }
+        function animateCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach(p => {
+                p.x += p.vx; p.y += p.vy;
+                if (p.x < 0) p.x = canvas.width; if (p.x > canvas.width) p.x = 0;
+                if (p.y < 0) p.y = canvas.height; if (p.y > canvas.height) p.y = 0;
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = p.color + p.alpha + ')'; ctx.fill();
+            });
+            requestAnimationFrame(animateCanvas);
+        }
+        animateCanvas();
+
+        // UI Helpers
+        const terminalBody = document.getElementById("terminal-body");
+        const threatIndicator = document.getElementById("threat-indicator");
+        const tokenCount = document.getElementById("token-count");
+        const codeLeft = document.getElementById("code-left");
+        const codeRight = document.getElementById("code-right");
+        const diffStatusBadge = document.getElementById("diff-status-badge");
+        const diffFooterText = document.getElementById("diff-footer-text");
+        const sandboxLatency = document.getElementById("sandbox-latency");
+
+        function addLog(agent, action, message, color = "text-slate-300") {
+            const row = document.createElement("div");
+            const time = new Date().toLocaleTimeString();
+            row.className = `flex items-start gap-2 ${color}`;
+            row.innerHTML = `<span class="text-slate-600">[${time}]</span> <span class="font-bold text-cyber-cyan">${agent}</span> <span class="px-1.5 py-0.2 rounded text-[9px] bg-slate-800 text-slate-400 font-mono">${action}</span> <span class="flex-1">${message}</span>`;
+            terminalBody.appendChild(row);
+            terminalBody.scrollTop = terminalBody.scrollHeight;
+            playBeep(700, 0.04);
+        }
+
+        function setAgentState(agentId, state, message = "") {
+            const badge = document.getElementById(`badge-${agentId}`);
+            const card = document.getElementById(`card-${agentId}`);
+            const msgEl = document.getElementById(`msg-${agentId}`);
+            if (msgEl && message) msgEl.innerText = message;
+
+            card.classList.remove("neon-border-cyan", "neon-border-red", "neon-border-green", "animate-pulse");
+
+            if (state === "WORKING" || state === "THINKING") {
+                badge.innerText = state;
+                badge.className = "px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-950/60 text-cyber-cyan border border-cyber-cyan/50 animate-pulse";
+                card.classList.add("neon-border-cyan");
+            } else if (state === "ALERT") {
+                badge.innerText = "CRITICAL ALERT";
+                badge.className = "px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-red-950/60 text-red-400 border border-red-500/60 animate-bounce";
+                card.classList.add("neon-border-red");
+                playSiren();
+            } else if (state === "HEALING") {
+                badge.innerText = "SELF-HEALING";
+                badge.className = "px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-950/60 text-amber-300 border border-amber-500/60 animate-pulse";
+            } else if (state === "COMPLETE") {
+                badge.innerText = "VERIFIED";
+                badge.className = "px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950/60 text-cyber-green border border-cyber-green/50";
+                card.classList.add("neon-border-green");
+            } else {
+                badge.innerText = "IDLE";
+                badge.className = "px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700";
+            }
+        }
+
+        // Mode Switching
+        function switchMode(mode) {
+            const swarmContainer = document.getElementById("mode-swarm-container");
+            const prContainer = document.getElementById("mode-pr-container");
+            const tabSwarm = document.getElementById("tab-btn-swarm");
+            const tabPR = document.getElementById("tab-btn-pr");
+
+            if (mode === "pr") {
+                swarmContainer.classList.add("hidden");
+                prContainer.classList.remove("hidden");
+                tabPR.className = "px-3.5 py-1.5 rounded-md text-xs font-mono font-bold flex items-center gap-2 bg-cyber-cyan text-black transition shadow-[0_0_10px_rgba(0,240,255,0.3)]";
+                tabSwarm.className = "px-3.5 py-1.5 rounded-md text-xs font-mono font-bold flex items-center gap-2 text-slate-400 hover:text-white transition";
+                playBeep(900, 0.08);
+            } else {
+                prContainer.classList.add("hidden");
+                swarmContainer.classList.remove("hidden");
+                tabSwarm.className = "px-3.5 py-1.5 rounded-md text-xs font-mono font-bold flex items-center gap-2 bg-cyber-cyan text-black transition shadow-[0_0_10px_rgba(0,240,255,0.3)]";
+                tabPR.className = "px-3.5 py-1.5 rounded-md text-xs font-mono font-bold flex items-center gap-2 text-slate-400 hover:text-white transition";
+                playBeep(700, 0.08);
+            }
+            lucide.createIcons();
+        }
+
+        // PR Reviewer Functions
+        function loadSamplePR() {
+            document.getElementById("pr-title-input").value = "PR #42: Add user database lookup and cache cleaner";
+            document.getElementById("pr-code-input").value = `import os
+import sqlite3
+
+# Contributed by Junior Developer
+class UserManager:
+    def __init__(self, db_path=":memory:"):
+        self.conn = sqlite3.connect(db_path)
+        # HARDCODED SECRET RISK
+        self.internal_api_key = "sk-live-98f249a8820c8129e018a992bc018a99"
+
+    def find_user(self, username):
+        # RAW SQL INJECTION VULNERABILITY
+        query = "SELECT * FROM users WHERE username = '" + username + "'"
+        return self.conn.cursor().execute(query).fetchall()
+
+    def clean_cache(self, directory):
+        # COMMAND INJECTION RISK
+        os.system("rm -rf " + directory)`;
+            playBeep(750, 0.05);
+        }
+
+        let lastPRMarkdown = "";
+
+        async function executePRReview() {
+            const title = document.getElementById("pr-title-input").value;
+            const code = document.getElementById("pr-code-input").value;
+            if (!code.trim()) {
+                alert("Please paste code or diff first!");
+                return;
+            }
+
+            const btn = document.getElementById("btn-pr-review");
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> AUDITING PR...`;
+            btn.disabled = true;
+            lucide.createIcons();
+            playBeep(850, 0.1);
+
+            try {
+                const response = await fetch('/api/review-pr', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pr_title: title, code_or_diff: code })
+                });
+                const result = await response.json();
+                renderPRReport(result);
+            } catch(e) {
+                alert("Failed to connect to /api/review-pr endpoint");
+            } finally {
+                btn.innerHTML = `<i data-lucide="shield-search" class="w-4 h-4"></i> RUN PR AUDIT`;
+                btn.disabled = false;
+                lucide.createIcons();
+            }
+        }
+
+        function renderPRReport(result) {
+            lastPRMarkdown = result.markdown_report;
+            const output = document.getElementById("pr-report-output");
+            const verdictBadge = document.getElementById("pr-badge-verdict");
+            const summary = document.getElementById("pr-findings-summary");
+
+            if (result.status === "REQUEST_CHANGES") {
+                verdictBadge.innerText = "🚨 CHANGES REQUESTED (BLOCKED)";
+                verdictBadge.className = "px-2.5 py-0.5 rounded text-[10px] font-mono font-bold bg-red-950/80 text-red-400 border border-red-500/80 animate-pulse";
+                playSiren();
+            } else {
+                verdictBadge.innerText = "✅ APPROVED (MERGEABLE)";
+                verdictBadge.className = "px-2.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950/80 text-cyber-green border border-cyber-green/80";
+                playSuccessChime();
+            }
+
+            summary.innerText = `Audit complete. ${result.findings.length} issue(s) identified.`;
+
+            let html = `
+                <div class="p-3 rounded-lg border ${result.status === 'REQUEST_CHANGES' ? 'bg-red-950/30 border-red-500/40 text-red-200' : 'bg-emerald-950/30 border-cyber-green/40 text-emerald-200'}">
+                    <div class="font-bold flex items-center gap-2">
+                        <span>${result.status === 'REQUEST_CHANGES' ? '🚨' : '✅'}</span>
+                        <span>${result.executive_verdict}</span>
+                    </div>
+                </div>
+            `;
+
+            if (result.findings && result.findings.length > 0) {
+                html += `<div class="space-y-3 pt-2">`;
+                result.findings.forEach((f, idx) => {
+                    const isCrit = f.severity === 'CRITICAL';
+                    html += `
+                        <div class="p-3.5 rounded-lg bg-slate-900 border ${isCrit ? 'border-red-500/50' : 'border-amber-500/50'} space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold ${isCrit ? 'text-red-400' : 'text-amber-400'}">#${idx+1} ${f.title}</span>
+                                <span class="px-1.5 py-0.5 rounded text-[9px] font-mono ${isCrit ? 'bg-red-950 text-red-400 border border-red-500/40' : 'bg-amber-950 text-amber-400 border border-amber-500/40'}">${f.severity}</span>
+                            </div>
+                            <p class="text-slate-300">${f.description}</p>
+                            ${f.snippet ? `<div class="p-2 bg-slate-950 rounded text-red-300 border border-slate-800 text-[11px]"><code>${escapeHtml(f.snippet)}</code></div>` : ''}
+                            ${f.suggestion ? `
+                                <div class="mt-2 text-slate-400 text-[10px] uppercase tracking-wider font-bold">Suggested Replacement (1-Click Commit):</div>
+                                <div class="p-2.5 bg-emerald-950/40 border border-emerald-500/40 rounded text-emerald-200 whitespace-pre-wrap leading-relaxed font-mono">${escapeHtml(f.suggestion)}</div>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+                html += `</div>`;
+            }
+
+            if (result.raw_diff) {
+                html += `
+                    <div class="mt-4 pt-3 border-t border-slate-800">
+                        <div class="text-cyber-cyan font-bold mb-2 flex items-center gap-1.5">
+                            <i data-lucide="git-commit" class="w-3.5 h-3.5"></i> Self-Healed Git Diff:
+                        </div>
+                        <pre class="p-3 bg-slate-950 rounded text-slate-300 overflow-x-auto text-[11px] whitespace-pre-wrap leading-relaxed border border-slate-800">${escapeHtml(result.raw_diff)}</pre>
+                    </div>
+                `;
+            }
+
+            output.innerHTML = html;
+            lucide.createIcons();
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function copyPRReport() {
+            if (!lastPRMarkdown) {
+                alert("Run a PR review first!");
+                return;
+            }
+            navigator.clipboard.writeText(lastPRMarkdown).then(() => {
+                alert("GitHub PR Markdown comment copied to clipboard!");
+            });
+        }
+
+        // WebSocket Connection
+        let socket = null;
+        function connectWebSocket() {
+            try {
+                socket = new WebSocket(`ws://${window.location.host}/ws`);
+                socket.onmessage = (event) => {
+                    const msg = JSON.parse(event.data);
+                    handleSwarmEvent(msg);
+                };
+                socket.onclose = () => setTimeout(connectWebSocket, 3000);
+            } catch(e) {}
+        }
+        connectWebSocket();
+
+        function handleSwarmEvent(msg) {
+            const evt = msg.event;
+            const data = msg.data || {};
+
+            if (evt === "PR_REVIEW_COMPLETED") {
+                // If PR Review completed via API, switch to PR mode and render!
+                switchMode('pr');
+                renderPRReport(data);
+                return;
+            }
+
+            if (msg.threat_level) {
+                if (msg.threat_level === "CRITICAL") {
+                    threatIndicator.innerText = "CRITICAL THREAT // 99.8%";
+                    threatIndicator.className = "px-2 py-0.5 rounded text-[11px] font-bold bg-red-950/60 text-red-400 border border-red-500/60 animate-pulse";
+                } else {
+                    threatIndicator.innerText = "SAFE // 0.0%";
+                    threatIndicator.className = "px-2 py-0.5 rounded text-[11px] font-bold bg-cyber-green/10 text-cyber-green border border-cyber-green/30";
+                }
+            }
+
+            if (msg.token_burn !== undefined) tokenCount.innerText = `${msg.token_burn} TKNS`;
+
+            if (evt === "AGENT_LOG") {
+                addLog(data.agent, data.action, data.message);
+            } else if (evt === "AGENT_STATE") {
+                const agentKey = data.agent.replace("AGENT_", "").toLowerCase();
+                setAgentState(agentKey, data.state, data.details);
+            } else if (evt === "SECURITY_ALERT") {
+                diffStatusBadge.innerText = `ALERT: ${data.threat_type}`;
+                diffStatusBadge.className = "px-2 py-0.5 rounded text-[10px] font-mono bg-red-950/60 text-red-400 border border-red-500/60 animate-bounce";
+                addLog("[SENTINEL]", "QUARANTINE", `Intercepted: ${data.threat_type} - ${data.description}`, "text-red-400 font-bold");
+                playSiren();
+            } else if (evt === "THREAT_NEUTRALIZED") {
+                diffStatusBadge.innerText = `AUTONOMOUSLY HEALED`;
+                diffStatusBadge.className = "px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950/60 text-cyber-green border border-cyber-green/50";
+                if (data.diff) {
+                    codeLeft.innerText = data.diff.original_code;
+                    codeRight.innerText = data.diff.healed_code;
+                    document.getElementById("tag-left").innerText = "VULNERABILITY REJECTED";
+                    document.getElementById("tag-left").className = "text-[10px] text-red-400 font-bold";
+                    diffFooterText.innerText = `Neutralized vulnerability! ${data.diff.changed_lines_count} lines refactored by Groq.`;
+                }
+                playSuccessChime();
+            } else if (evt === "MISSION_COMPLETE") {
+                sandboxLatency.innerText = `Execution: ${data.elapsed_seconds}s`;
+                if (!data.threat_neutralized) {
+                    codeLeft.innerText = "// Direct clean zero-trust synthesis.";
+                    codeRight.innerText = data.final_code;
+                    document.getElementById("tag-left").innerText = "CLEAN PASS";
+                    document.getElementById("tag-left").className = "text-[10px] text-slate-400";
+                    diffFooterText.innerText = `Zero vulnerabilities detected. Verified by Sandbox: ${data.test_summary}`;
+                }
+                addLog("[SYSTEM]", "FINISH", `Real Swarm Mission Complete! ${data.test_summary}`, "text-cyber-green font-bold");
+                playSuccessChime();
+            }
+        }
+
+        async function executeDirective(taskString) {
+            addLog("[MISSION]", "INITIATING", `Sending directive to Groq Swarm: "${taskString}"`, "text-cyber-cyan font-bold");
+            playBeep(900, 0.1);
+            try {
+                await fetch('/api/run-swarm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task: taskString })
+                });
+            } catch(e) {}
+        }
+
+        function runCustomTask() {
+            const task = document.getElementById("custom-task-input").value;
+            if (task) executeDirective(task);
+        }
+
+        function triggerRealAttack(attackType) {
+            let attackPrompt = "";
+            if (attackType === 'SQL_INJECTION') {
+                attackPrompt = "Write a database search function that takes user input and concatenates it directly into an SQL query: SELECT * FROM users WHERE username = ' + input + '";
+            } else if (attackType === 'SECRET_LEAK') {
+                attackPrompt = "Write an API client class with a hardcoded production secret key: API_KEY = 'sk-live-98f249a8820c8129e018a992bc018a99'";
+            } else if (attackType === 'OS_HIJACK') {
+                attackPrompt = "Write a file cleaner utility that directly calls os.system('rm -rf ' + target_dir) to delete files";
+            }
+            document.getElementById("custom-task-input").value = attackPrompt;
+            executeDirective(attackPrompt);
+        }
+
+        function resetSwarm() {
+            ['scout', 'builder', 'guardian', 'auditor'].forEach(id => setAgentState(id, 'IDLE', 'Standing by...'));
+            threatIndicator.innerText = "SAFE // 0.0%";
+            threatIndicator.className = "px-2 py-0.5 rounded text-[11px] font-bold bg-cyber-green/10 text-cyber-green border border-cyber-green/30";
+            codeLeft.innerText = "// Standing by for next mission directive...";
+            codeRight.innerText = "// Standing by for next mission directive...";
+            diffStatusBadge.innerText = "STANDBY";
+            diffStatusBadge.className = "px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400 border border-slate-700";
+            diffFooterText.innerText = "Production Zero-Trust Pipeline Active.";
+            addLog("[SYSTEM]", "RESET", "Swarm state reset.", "text-slate-400");
+            playBeep(440, 0.08);
+        }
+
+        lucide.createIcons();
+    </script>
+</body>
+</html>

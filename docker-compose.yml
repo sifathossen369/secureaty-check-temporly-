@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  nexuscore:
+    build: .
+    container_name: nexuscore_mission_control
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PORT=8000
+    restart: unless-stopped

@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment Variables (CRITICAL: Never commit real API keys!)
+.env
+.env.local
+
+# Ephemeral Sandbox Cache
+.sandbox_cache/
+test_run_*.py
+
+# Operating System Files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# Editor / IDE settings
+.vscode/
+.idea/
+*.swp
+*.swo
